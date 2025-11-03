@@ -34,7 +34,7 @@ for path in tqdm(os.listdir(DATASET_PATH)):
       "annotations": [],
     }
     
-    new_label_dir = f"{DATASET_PATH}/{path}/_new_labels/{dir_name}"
+    new_label_dir = f"{DATASET_PATH}/{path}/_new_labels"
     os.makedirs(new_label_dir, exist_ok=True)
     
     calibration_path = f"{DATASET_PATH}/{path}/_calibration/{dir_name}.json"
