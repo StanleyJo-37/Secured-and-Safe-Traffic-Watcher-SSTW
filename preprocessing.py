@@ -1,77 +1,85 @@
 import cv2
-import torch
-import torchvision
 import numpy as np
 import matplotlib.pyplot as plt
-import os
-from typing import List
-import PIL.Image as Image
 
-DATASET_PATH = "./TUM"
-FRAME_PATH = "./FRAMES"
-
-toTensor = torchvision.transforms.Compose([
-  torchvision.transforms.Resize((224, 224)),
-  torchvision.transforms.ToTensor(),
-])
-
-def to_frames(dataset_path: str=DATASET_PATH, frame_path: str=FRAME_PATH) -> None:
-  """
-    Convert videos into frames and save them into a directory,
-    ready to be processed in later pipeline.
-  """
-
-  for name in os.listdir(dataset_path):
-    video_path = os.path.join(dataset_path, name)
-    save_dir = os.path.join(frame_path, os.path.splitext(name)[0])
-    os.makedirs(save_dir, exist_ok=True)
-
-    video = cv2.VideoCapture(video_path)
-    count, success = 0, True
-    while success:
-      success, image = video.read()
-
-      if success:
-        cv2.imwrite(f"{frame_path}/{name}/frame{count}.jpg", image)
-        count += 1
-    
-    video.release()
-
-# def remove_glare(input_frame, patch_size):
-#   gray = cv2.cvtColor(input_frame, cv2.COLOR_RGB2GRAY)
-#   mask = cv2.threshold(gray, 220, 255, cv2.THRESH_BINARY)[1]
-
-#   contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-
-
-#   return image
+max_value = 255
+max_value_H = 360 // 2
+low_H = 0
+low_S = 0
+low_V = 0
+high_H = max_value_H
+high_S = max_value
+high_V = max_value
+max_V = high_V - 25
 
 def normalize(input_frame):
-  input_frame = cv2.GaussianBlur((3, 3), 0)
-  input_frame = cv2.convertScaleAbs(input_frame, alpha=1.2)
-  input_frame = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB)
-  # input_frame = remove_glare(input_frame)
+  input_frame = cv2.convertScaleAbs(input_frame, alpha=1.2).astype(np.float32) / 255.0
   return input_frame
 
-def to_tensors(frames_path: str) -> List[torch.Tensor]:
-  """
-    Convert frames from a directory into a list of tensors,
-    comprising of one whole video.
-  """
+def unsharp_mask(
+  image,
+  sigma: int = 5,
+  strength: float = 0.7
+):
+  image = image.astype(np.float32)
+  
+  medianBlurred = cv2.medianBlur(image.astype(np.uint8), sigma)
+  
+  lap = cv2.Laplacian(medianBlurred, cv2.CV_32F)
+  
+  sharp = image - strength * lap
+  sharp = np.clip(sharp, 0, 255).astype(np.uint8)
+  
+  return sharp
 
-  tensors: List[torch.Tensor] = [[]]
+def bright_pixel_to_dark_pixel_ratio(frame):
+  grayscale_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+  total_pixel_count = frame.shape[0] * frame.shape[1]
+  
+  dark_pixels = cv2.adaptiveThreshold(
+    grayscale_frame,
+    100,
+    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    cv2.THRESH_BINARY,
+    11,
+    2
+  )
+  dark_pixel_count = cv2.countNonZero(dark_pixels)
+  bright_pixel_count = total_pixel_count - dark_pixel_count
+  
+  return bright_pixel_count / dark_pixel_count
 
-  for frame_name in sorted(os.listdir(frames_path)):
-    full_path = os.path.join(frames_path, frame_name)
-    
-    frame = cv2.imread(full_path, flags=cv2.IMREAD_COLOR)
-    frame = normalize(frame)
-    array = Image.fromarray(frame)
-    
-    tensor = toTensor(array)
-    tensors.append(tensor)
+def dim_night_light(frame):
+  hsv_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
+  dimmed_frame = cv2.inRange(hsv_frame, (low_H, low_S, low_V), (high_H, high_S, max_V))
+  dimmed_frame = cv2.cvtColor(dimmed_frame, cv2.COLOR_HSV2RGB)
+  return dimmed_frame
 
-  return tensors
+def preprocess_data(frame, label):
+  frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+  
+  if bright_pixel_to_dark_pixel_ratio < 0.3:
+    frame = dim_night_light(frame)
+  
+  normalized_frame = normalize(frame)
+  sharpened_frame = unsharp_mask(normalized_frame)
+  
+  return sharpened_frame, label
 
+def test_preprocess():
+  orig_img = cv2.imread("./datasets/a9_dataset_r01_s01/_images/s040_camera_basler_north_16mm/1607511137_552725296_s040_camera_basler_north_16mm.png")
+  sharpened = unsharp_mask(orig_img)
 
+  plt.figure(figsize=(20, 8))
+  plt.axis('off')
+
+  plt.subplot(1, 2, 1)
+  plt.imshow(orig_img)
+  plt.title("Original Image")
+
+  plt.subplot(1, 2, 2)
+  plt.imshow(sharpened)
+  plt.title("Sharpened Image")
+
+  plt.tight_layout()
+  plt.show()
