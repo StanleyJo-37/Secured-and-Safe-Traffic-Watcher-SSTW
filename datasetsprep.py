@@ -8,17 +8,7 @@ DATASET_PATH = "./datasets"
 
 def project_2d(
   bbox_3d: np.array,
-  # P: np.array
 ):
-  
-  # N = bbox_3d.shape[0]
-  # ones = np.ones((N, 1))
-  # coords_3d = np.hstack((bbox_3d, ones))
-  
-  # projection = (P @ coords_3d.T).T
-  
-  # x = projection[:, 0] / projection[:, 2]
-  # y = projection[:, 1] / projection[:, 2]
 
   xmin = np.min(bbox_3d[:, 0])
   xmax = np.max(bbox_3d[:, 0])
@@ -89,7 +79,6 @@ for path in tqdm(os.listdir(DATASET_PATH)):
             
           xmin, xmax, ymin, ymax = project_2d(
             np.array(list(label["box3d_projected"].values())),
-            # np.array(calibration_obj["projection_matrix"])
           )
           bbox = [float(xmin), float(ymin), float(xmax - xmin), float(ymax - ymin)]
           
