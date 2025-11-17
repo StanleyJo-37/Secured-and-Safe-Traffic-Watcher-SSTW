@@ -58,7 +58,7 @@ def dim_night_light(frame):
 def preprocess_data(frame, label):
   frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
   
-  if bright_pixel_to_dark_pixel_ratio < 0.3:
+  if bright_pixel_to_dark_pixel_ratio(frame) < 0.3:
     frame = dim_night_light(frame)
   
   normalized_frame = normalize(frame)
