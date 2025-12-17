@@ -13,14 +13,11 @@ CORS(app)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# --- 1. SETUP MODEL & TRACKER ---
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Initialize Model
 print("Loading model...")
-model = ClassicalSSTWModel(num_classes=7) # Ensure this matches training
+model = ClassicalSSTWModel(num_classes=7)
 try:
-    # Load weights
     model.load_state_dict(torch.load('outputs/best_model_new.pth', map_location=device))
     model.to(device)
     model.eval()
@@ -31,19 +28,13 @@ except Exception as e:
     model_loaded = False
     model = None
 
-# --- HELPER: DRAWING FUNCTION ---
 def draw_results(image, detections):
-    """
-    image: OpenCV BGR image
-    detections: List of dicts {'bbox': [x1,y1,x2,y2], 'score': float, 'label': int, 'id': int (optional)}
-    """
     draw_img = image.copy()
     for det in detections:
         x1, y1, x2, y2 = map(int, det['bbox'])
         score = det.get('score', 0.0)
         track_id = det.get('id', None)
         
-        # Color: Green for detection, Orange for tracked object
         color = (0, 255, 0) if track_id is None else (0, 165, 255)
         
         cv2.rectangle(draw_img, (x1, y1), (x2, y2), color, 2)
@@ -56,23 +47,15 @@ def draw_results(image, detections):
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
     return draw_img
 
-# --- HELPER: INFERENCE FOR SINGLE IMAGE ---
 def process_single_frame(img_bgr):
-    """
-    Runs raw detection (No DeepSORT) for a single static image.
-    """
-    # 1. Prepare Image (RGB for model)
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     
-    # 2. Inference
     with torch.no_grad():
-        # Pass training=False to trigger feature extraction
         proposals, labels, scores, deltas = model(img_rgb, None, training=False)
 
     if len(proposals) == 0:
         return []
 
-    # 3. Apply Regression & Clamping (Same logic as your notebook)
     dw = deltas[:, 2].clamp(min=-1.0, max=1.0)
     dh = deltas[:, 3].clamp(min=-1.0, max=1.0)
     
@@ -87,18 +70,12 @@ def process_single_frame(img_bgr):
     pred_h = p_h * torch.exp(dh)
     
     refined_boxes = torch.stack([
-        pred_ctr_x - 0.5 * pred_w,
-        pred_ctr_y - 0.5 * pred_h,
-        pred_ctr_x + 0.5 * pred_w,
-        pred_ctr_y + 0.5 * pred_h
+        pred_ctr_x - 0.5 * pred_w * 4.,
+        pred_ctr_y - 0.5 * pred_h * 4.,
+        pred_ctr_x + 0.5 * pred_w * 4.,
+        pred_ctr_y + 0.5 * pred_h * 4.
     ], dim=1)
 
-    # 4. Dynamic Scaling (Recover coordinates)
-    # Note: We rely on the internal resize logic. 
-    # If your notebook had explicit scaling, add it here.
-    # For now, assuming model returns coordinates relative to input size.
-    
-    # 5. NMS
     keep = torchvision.ops.nms(refined_boxes, scores, iou_threshold=0.3)
     
     results = []
@@ -107,7 +84,7 @@ def process_single_frame(img_bgr):
     final_labels = labels[keep].cpu().numpy()
     
     for i in range(len(final_boxes)):
-        if final_scores[i] > 0.5: # Threshold
+        if final_scores[i] > 0.5:
             results.append({
                 'bbox': final_boxes[i],
                 'score': final_scores[i],
@@ -127,14 +104,11 @@ def process_image():
     if not file: return jsonify({'error': 'No file'}), 400
 
     try:
-        # 1. Load Image as OpenCV BGR
         file_bytes = np.frombuffer(file.read(), np.uint8)
         img_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
         
-        # 2. Run Detection
         detections = process_single_frame(img_bgr)
         
-        # 3. Draw & Save
         result_img = draw_results(img_bgr, detections)
         result_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result.png')
         cv2.imwrite(result_path, result_img)
