@@ -6,6 +6,7 @@ import joblib
 from preprocessing import ltp, resize_image_and_bboxes, get_bbox_points
 import copy
 
+
 class FeatureExtractor():
 	def __init__(self, pca_path='outputs/hog_pca.joblib', feat_scaler_path='outputs/feat_scaler.joblib'):
 

@@ -93,12 +93,21 @@ def process_single_frame(img_bgr):
             
     return results
 
+# Store last analysis result globally
+last_analysis = {
+    "safety_score": 0,
+    "traffic_density": "Low",
+    "violations_detected": 0,
+    "details": []
+}
+
 @app.route('/')
 def home():
     return render_template('index.html', model_loaded=model_loaded)
 
 @app.route('/process_image', methods=['POST'])
 def process_image():
+    global last_analysis
     if not model_loaded: return jsonify({'error': 'Model not loaded'}), 500
     file = request.files.get('file')
     if not file: return jsonify({'error': 'No file'}), 400
@@ -113,10 +122,46 @@ def process_image():
         result_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result.png')
         cv2.imwrite(result_path, result_img)
         
-        return jsonify({'success': True, 'count': len(detections)})
+        # 4. Update analysis result
+        num_detections = len(detections)
+        if num_detections == 0:
+            density = "Low"
+            safety = 95
+        elif num_detections <= 3:
+            density = "Low"
+            safety = 85
+        elif num_detections <= 7:
+            density = "Medium"
+            safety = 70
+        else:
+            density = "High"
+            safety = 50
+        
+        last_analysis = {
+            "safety_score": safety,
+            "traffic_density": density,
+            "violations_detected": num_detections,
+            "details": [
+                {"timestamp": "N/A", "type": f"Detection {i+1}", "severity": "Medium"}
+                for i in range(min(num_detections, 5))
+            ]
+        }
+        
+        return jsonify({'success': True, 'count': num_detections})
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/analysis_result', methods=['GET'])
+def get_analysis_result():
+    return jsonify(last_analysis)
+
+@app.route('/result_image')
+def get_result_image():
+    result_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result.png')
+    if os.path.exists(result_path):
+        return send_file(result_path, mimetype='image/png')
+    return jsonify({'error': 'No result available'}), 404
 
 # @app.route('/process_video', methods=['POST'])
 # def process_video():

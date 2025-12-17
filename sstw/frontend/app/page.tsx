@@ -17,6 +17,7 @@ interface AnalysisResult {
   safety_score: number;
   traffic_density: string;
   violations_detected: number;
+  car_count?: number;
   details: Array<{
     timestamp: string;
     type: string;
@@ -172,6 +173,27 @@ export default function Home() {
     if (score >= 80) return "text-success";
     if (score >= 60) return "text-warning";
     return "text-error";
+  };
+
+  const getDensityColor = (density: string) => {
+    switch (density.toLowerCase()) {
+      case "high":
+        return "bg-error/20 text-error border-error/30";
+      case "medium":
+        return "bg-warning/20 text-warning border-warning/30";
+      case "low":
+        return "bg-success/20 text-success border-success/30";
+      default:
+        return "bg-secondary-text/20 text-secondary-text border-secondary-text/30";
+    }
+  };
+
+  const getSeverityLevel = (count: number) => {
+    if (count === 0) return { level: "Clear", description: "No vehicles detected" };
+    if (count <= 3) return { level: "Light", description: "Light traffic flow" };
+    if (count <= 7) return { level: "Moderate", description: "Moderate traffic" };
+    if (count <= 15) return { level: "Heavy", description: "Heavy traffic detected" };
+    return { level: "Congested", description: "Traffic congestion" };
   };
 
   return (
@@ -349,80 +371,67 @@ export default function Home() {
 
           {analysisResult && (
             <div className="space-y-6">
-              {/* Result Image (for image uploads) */}
+              {/* Result Image with Detections */}
               {resultImage && (
                 <div className="overflow-hidden rounded-xl border border-secondary-text/10">
                   <img
                     src={resultImage}
-                    alt="Processed result"
+                    alt="Processed result with detections"
                     className="w-full object-contain"
                   />
                 </div>
               )}
 
-              {/* Score Grid */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="rounded-xl bg-secondary-text/5 p-4 text-center">
-                  <p className="text-xs text-secondary-text">Safety Score</p>
-                  <p
-                    className={`mt-1 text-3xl font-bold ${getScoreColor(
-                      analysisResult.safety_score
-                    )}`}
-                  >
-                    {analysisResult.safety_score}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-secondary-text/5 p-4 text-center">
-                  <p className="text-xs text-secondary-text">Traffic Density</p>
-                  <p className="mt-1 text-lg font-semibold text-primary-text">
-                    {analysisResult.traffic_density}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-secondary-text/5 p-4 text-center">
-                  <p className="text-xs text-secondary-text">Violations</p>
-                  <p className="mt-1 text-3xl font-bold text-error">
+              {/* Main Stats */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Vehicle Count */}
+                <div className="rounded-xl bg-accent/10 border border-accent/20 p-5 text-center">
+                  <p className="text-xs text-secondary-text uppercase tracking-wide">Vehicles Detected</p>
+                  <p className="mt-2 text-5xl font-bold text-accent">
                     {analysisResult.violations_detected}
                   </p>
+                  <p className="mt-1 text-sm text-secondary-text">
+                    {getSeverityLevel(analysisResult.violations_detected).description}
+                  </p>
+                </div>
+
+                {/* Traffic Severity */}
+                <div className="rounded-xl bg-secondary-text/5 border border-secondary-text/10 p-5 text-center">
+                  <p className="text-xs text-secondary-text uppercase tracking-wide">Traffic Severity</p>
+                  <p className={`mt-2 text-3xl font-bold ${getScoreColor(analysisResult.safety_score)}`}>
+                    {getSeverityLevel(analysisResult.violations_detected).level}
+                  </p>
+                  <div className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-medium border ${getDensityColor(analysisResult.traffic_density)}`}>
+                    {analysisResult.traffic_density} Density
+                  </div>
                 </div>
               </div>
 
-              {/* Violations List */}
-              {analysisResult.details.length > 0 && (
-                <div>
-                  <h4 className="mb-3 text-sm font-medium text-primary-text">
-                    Detected Violations
-                  </h4>
-                  <div className="space-y-2">
-                    {analysisResult.details.map((detail, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between rounded-lg border border-secondary-text/10 px-4 py-3"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary-text/10">
-                            <Clock className="h-4 w-4 text-secondary-text" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-primary-text">
-                              {detail.type}
-                            </p>
-                            <p className="text-xs text-secondary-text">
-                              {detail.timestamp}
-                            </p>
-                          </div>
-                        </div>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${getSeverityColor(
-                            detail.severity
-                          )}`}
-                        >
-                          {detail.severity}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+              {/* Safety Score Bar */}
+              <div className="rounded-xl bg-secondary-text/5 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-secondary-text">Road Safety Score</span>
+                  <span className={`text-lg font-bold ${getScoreColor(analysisResult.safety_score)}`}>
+                    {analysisResult.safety_score}/100
+                  </span>
                 </div>
-              )}
+                <div className="h-2 w-full rounded-full bg-secondary-text/10 overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      analysisResult.safety_score >= 80 ? 'bg-success' : 
+                      analysisResult.safety_score >= 60 ? 'bg-warning' : 'bg-error'
+                    }`}
+                    style={{ width: `${analysisResult.safety_score}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-secondary-text">
+                  {analysisResult.safety_score >= 80 
+                    ? "Low risk - Safe traffic conditions" 
+                    : analysisResult.safety_score >= 60 
+                    ? "Moderate risk - Exercise caution" 
+                    : "High risk - Heavy traffic detected"}
+                </p>
+              </div>
 
               {/* Close Button */}
               <Button
