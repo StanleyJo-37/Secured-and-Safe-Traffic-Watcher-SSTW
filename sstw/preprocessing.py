@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import joblib
-from dcp import HazeRemover
+from dcp.haze_remover import HazeRemover
 
 def get_bbox_points(bbox):
 	x, y, w, h = bbox
