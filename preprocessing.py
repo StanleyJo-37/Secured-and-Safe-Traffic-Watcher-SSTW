@@ -1,85 +1,141 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+import joblib
 
-max_value = 255
-max_value_H = 360 // 2
-low_H = 0
-low_S = 0
-low_V = 0
-high_H = max_value_H
-high_S = max_value
-high_V = max_value
-max_V = high_V - 25
+def get_bbox_points(bbox):
+	x, y, w, h = bbox
+	x2 = x + w
+	y2 = y + h
 
-def normalize(input_frame):
-  input_frame = cv2.convertScaleAbs(input_frame, alpha=1.2).astype(np.float32) / 255.0
-  return input_frame
+	return max(0, int(x)), max(0, int(y)), x2, y2
 
-def unsharp_mask(
-  image,
-  sigma: int = 5,
-  strength: float = 0.7
-):
-  image = image.astype(np.float32)
-  
-  medianBlurred = cv2.medianBlur(image.astype(np.uint8), sigma)
-  
-  lap = cv2.Laplacian(medianBlurred, cv2.CV_32F)
-  
-  sharp = image - strength * lap
-  sharp = np.clip(sharp, 0, 255).astype(np.uint8)
-  
-  return sharp
+def resize_image_and_bboxes(image, labels, scale=0.25):
+	if scale == 1.0:
+		return image, labels
 
-def bright_pixel_to_dark_pixel_ratio(frame):
-  grayscale_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-  total_pixel_count = frame.shape[0] * frame.shape[1]
-  
-  dark_pixels = cv2.adaptiveThreshold(
-    grayscale_frame,
-    100,
-    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-    cv2.THRESH_BINARY,
-    11,
-    2
-  )
-  dark_pixel_count = cv2.countNonZero(dark_pixels)
-  bright_pixel_count = total_pixel_count - dark_pixel_count
-  
-  return bright_pixel_count / dark_pixel_count
+	resized_img = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR if scale > 1.0 else cv2.INTER_AREA)
 
-def dim_night_light(frame):
-  hsv_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
-  dimmed_frame = cv2.inRange(hsv_frame, (low_H, low_S, low_V), (high_H, high_S, max_V))
-  dimmed_frame = cv2.cvtColor(dimmed_frame, cv2.COLOR_HSV2RGB)
-  return dimmed_frame
+	new_bboxes = []
 
-def preprocess_data(frame, label):
-  frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-  
-  if bright_pixel_to_dark_pixel_ratio(frame) < 0.3:
-    frame = dim_night_light(frame)
-  
-  normalized_frame = normalize(frame)
-  sharpened_frame = unsharp_mask(normalized_frame)
-  
-  return sharpened_frame, label
+	for bbox in labels['target_bboxes']:
+		new_bboxes.append([int(c * scale) for c in bbox])
 
-def test_preprocess():
-  orig_img = cv2.imread("./datasets/a9_dataset_r01_s01/_images/s040_camera_basler_north_16mm/1607511137_552725296_s040_camera_basler_north_16mm.png")
-  sharpened = unsharp_mask(orig_img)
+	return resized_img, { **labels, 'target_bboxes': new_bboxes }
 
-  plt.figure(figsize=(20, 8))
-  plt.axis('off')
+uniform_lookup = np.array([58] * 256)
+bin_id = 0
 
-  plt.subplot(1, 2, 1)
-  plt.imshow(orig_img)
-  plt.title("Original Image")
+def uniformity(bits):
+	transitions = 0
+	curr_bit = bits[0]
 
-  plt.subplot(1, 2, 2)
-  plt.imshow(sharpened)
-  plt.title("Sharpened Image")
+	for bit in bits[1:]:
+		if bit != curr_bit:
+			transitions += 1
+		curr_bit = bit
 
-  plt.tight_layout()
-  plt.show()
+	return transitions
+
+for i in range(256):
+	bits = np.array([(i >> j) & 1 for j in range(8)])
+
+	if uniformity(bits) <= 2:
+		uniform_lookup[i] = bin_id
+		bin_id += 1
+	else:
+		uniform_lookup[i] = 58
+
+def bits_to_integer(bits: list) -> int:
+	total = 0
+
+	for i, bit in enumerate(bits):
+		total += pow(2, i) * bit
+
+	return total
+
+def ltp(img, k):
+	hist_upper = np.zeros(59, int)
+	hist_lower = np.zeros(59, int)
+
+	offsets = [
+		(-1, -1), (-1, 0), (-1, 1),
+		(0, -1),           (0, 1),
+		(1, -1), (1, 0), (1, 1),
+	]
+
+	for i in range(1, img.shape[0] - 1):
+		for j in range(1, img.shape[1] - 1):
+
+			upper_bits, lower_bits = [], []
+			center = img[i, j]
+
+			center = int(center)
+			k = int(k)
+
+			lower_bound = max(0, center - k)
+			upper_bound = min(255, center + k)
+
+			for dy, dx in offsets:
+				val = img[i + dy, j + dx]
+
+				upper_bits.append(val > upper_bound)
+				lower_bits.append(val < lower_bound)
+
+			hist_upper[uniform_lookup[bits_to_integer(upper_bits)]] += 1
+			hist_lower[uniform_lookup[bits_to_integer(lower_bits)]] += 1
+
+	return np.concatenate([hist_upper, hist_lower])
+
+hog = cv2.HOGDescriptor((128, 64), (16, 16), (8, 8), (8, 8), 9)
+def extract_features(X, pca_path='outputs/hog_pca.joblib'):
+	# Get bounding boxes using Selective Search
+	selective_search = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
+	selective_search.setBaseImage(X)
+	selective_search.switchToSelectiveSearchFast()
+
+	strategy_color = cv2.ximgproc.segmentation.createSelectiveSearchSegmentationStrategyColor()
+	strategy_texture = cv2.ximgproc.segmentation.createSelectiveSearchSegmentationStrategyTexture()
+	strategy_size = cv2.ximgproc.segmentation.createSelectiveSearchSegmentationStrategySize()
+
+	strategy_combined = cv2.ximgproc.segmentation.createSelectiveSearchSegmentationStrategyMultiple()
+	strategy_combined.addStrategy(strategy_color, 0.5)
+	strategy_combined.addStrategy(strategy_texture, 0.5)
+	strategy_combined.addStrategy(strategy_size, 0.5)
+
+	selective_search.addStrategy(strategy_combined)
+	selective_search.switchToSingleStrategy(k=100, sigma=0.8)
+
+	pca = joblib.load(pca_path)
+
+	boxes = selective_search.process()
+
+	# Feature extraction
+	boxes_list = []
+	features_list = []
+	for box in boxes:
+		feat = []
+
+		box = get_bbox_points(box)
+		x, y, x2, y2 = box
+		cropped_img = X[y:y2, x:x2]
+		resized_img = cv2.resize(cropped_img, (128, 64))
+		gray_image = cv2.cvtColor(resized_img, cv2.COLOR_RGB2GRAY)
+
+		# HOG
+		hog_feat = hog.compute(gray_image).flatten()
+		hog_feat = pca.transform(hog_feat.reshape(1, -1)).flatten()
+		feat.extend(hog_feat)
+
+		# HSV
+		hsv_image = cv2.cvtColor(resized_img, cv2.COLOR_RGB2HSV)
+		hsv_hist = cv2.calcHist([hsv_image], [0, 1], None, [30, 16], [0, 180, 0, 256]).flatten()
+		feat.extend(hsv_hist)
+
+		# LTP
+		ltp_feat = ltp(gray_image, 10)
+		feat.extend(ltp_feat.flatten())
+
+		boxes_list.append(box)
+		features_list.append(feat)
+
+	return np.array(boxes_list), np.array(features_list)

@@ -3,6 +3,7 @@ import cv2
 import json
 from tqdm import tqdm
 import numpy as np
+from preprocessing import extract_features
 
 DATASET_PATH = "./datasets"
 
@@ -20,26 +21,33 @@ def project_2d(
 image_id = 1
 label_id = 1
 category_id = 1
-color_id = 1
+counter = 0
 
-weather = {
-  "1": "snowy",
-  "2": "foggy",
-  "3": "clear",
-}
+os.makedirs(f"{DATASET_PATH}/_extracted_features", exist_ok=True)
 
 category_path = f"{DATASET_PATH}/categories/categories.json"
-color_path = f"{DATASET_PATH}/categories/colors.json"
 categories: list[dict[str, any]] = []
-colors: list[dict[str, any]] = []
 
 for path in tqdm(os.listdir(DATASET_PATH)):
+  
+  if path.startswith("."):
+    continue
+  
   tqdm.write(f"Processing dataset: {path}")
   label_path = f"{DATASET_PATH}/{path}/_labels"
   
   for dir_idx, dir_name in enumerate(os.listdir(label_path)):
+    
+    full_dir_path = f"{label_path}/{dir_name}"
+    if not os.path.isdir(full_dir_path):
+      continue
+    
     calibration_path = f"{DATASET_PATH}/{path}/_calibration/{dir_name}.json"
     calibration_obj = json.load(open(calibration_path, "r"))
+    
+    new_label_dir = f"{DATASET_PATH}/{path}/_new_labels"
+    os.makedirs(new_label_dir, exist_ok=True)
+    os.makedirs(f"{new_label_dir}/{dir_name}", exist_ok=True)
     
     new_label_obj = {
       "calibrations": calibration_obj,
@@ -47,10 +55,11 @@ for path in tqdm(os.listdir(DATASET_PATH)):
       "annotations": [],
     }
     
-    new_label_dir = f"{DATASET_PATH}/{path}/_new_labels"
-    os.makedirs(new_label_dir, exist_ok=True)
-    
     for label_name in os.listdir(f"{label_path}/{dir_name}"):
+      if counter % 20 != 0: 
+        counter += 1
+        continue
+      counter += 1
       full_label_path = f"{label_path}/{dir_name}/{label_name}"
       new_label_path = f"{DATASET_PATH}/{path}/_new_labels/{dir_name}/{label_name}"
       img_path = f"{DATASET_PATH}/{path}/_images/{dir_name}/{label_name.split('.')[0]}.png"
@@ -63,14 +72,27 @@ for path in tqdm(os.listdir(DATASET_PATH)):
           print(f"Image not found for {img_path}")
           continue
         
+        save_path = f"{DATASET_PATH}/_extracted_features/{label_obj['image_file_name'].split('.')[0]}.npy"
+
+        resized_img = cv2.resize(img, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+        boxes, features = extract_features(resized_img)
+        
+        if len(boxes) > 0:
+          data_to_save = np.hstack((boxes, features))
+          np.save(save_path, data_to_save)
+        else:
+          np.save(save_path, np.array([]))
+        
         new_label_obj["images"].append({
           "id": image_id,
           "file_name": label_obj["image_file_name"],
-          "width": img.shape[1],
-          "height": img.shape[0],
+          "width": int(img.shape[1]),
+          "height": int(img.shape[0]),
           "path": img_path,
           "timestamp_secs": label_obj["timestamp_secs"],
         })
+        
+        cat_map = {}
         
         for label in label_obj["labels"]:
           cat_id = next(
@@ -78,14 +100,6 @@ for path in tqdm(os.listdir(DATASET_PATH)):
               if category["name"] == label["category"]),
             None
           ) if len(categories) > 0 else None
-          
-          vehicle_color = label["attributes"]
-          
-          col_id = next(
-            (col["id"] for col in colors
-              if col["name"] == vehicle_color),
-            None
-          ) if len(colors) > 0 else None
           
           if cat_id == None:
             categories.append({
@@ -95,37 +109,19 @@ for path in tqdm(os.listdir(DATASET_PATH)):
             
             cat_id = category_id
             category_id += 1
-            
-          if col_id == None:
-            colors.append({
-              "id": color_id,
-              "name": vehicle_color,
-            })
-            
-            col_id = color_id
-            color_id += 1
-            
+          
           xmin, xmax, ymin, ymax = project_2d(
             np.array(list(label["box3d_projected"].values())),
           )
-          bbox = [float(xmin), float(ymin), float(xmax - xmin), float(ymax - ymin)]
-          
-          if "s01" in path:
-            w = "snowy"
-          elif "s02" in path:
-            w = "foggy"
-          elif "s03" in path:
-            w = "clear"
+          bbox = [int(xmin), int(ymin), int(xmax), int(ymax)]
           
           new_label_obj["annotations"].append({
             "id": label_id,
             "image_id": image_id,
             "category_id": cat_id,
-            "color_id": col_id,
             "bbox": bbox,
             "iscrowd": 0,
-            "area": float(bbox[2] * bbox[3]),
-            "weather": w,
+            "area": float((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])),
             "attributes": label.get("attributes", {}),
           })
           
@@ -140,6 +136,3 @@ for path in tqdm(os.listdir(DATASET_PATH)):
 os.makedirs(os.path.dirname(category_path), exist_ok=True)
 with open(category_path, "w") as f:
   json.dump(categories, f, indent=4)
-  
-with open(color_path, "w") as f:
-  json.dump(colors, f, indent=4)

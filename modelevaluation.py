@@ -4,9 +4,6 @@ from torch import nn
 from model import Model
 from torch.utils.data import DataLoader
 
-def compute_iou():
-  pass
-
 def get_eval(
   model: Model,
   test_dataset: DataLoader,
