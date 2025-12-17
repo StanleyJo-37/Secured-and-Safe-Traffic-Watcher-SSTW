@@ -1,9 +1,22 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Upload, Video, AlertTriangle, CheckCircle, Clock, X } from "lucide-react";
+import {
+  Upload,
+  Video,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
@@ -31,7 +44,9 @@ export default function Home() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
+    null
+  );
   const [showResults, setShowResults] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +116,7 @@ export default function Home() {
         });
       }, 500);
 
-      const response = await fetch(`${API_BASE}/process_video`, {
+      const response = await fetch(`${API_BASE}/process_image`, {
         method: "POST",
         body: formData,
       });
@@ -218,7 +233,6 @@ export default function Home() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="video/*"
                   onChange={handleInputChange}
                   className="hidden"
                 />
@@ -295,7 +309,11 @@ export default function Home() {
                       </>
                     )}
                   </Button>
-                  <Button variant="outline" onClick={resetUpload} disabled={isUploading}>
+                  <Button
+                    variant="outline"
+                    onClick={resetUpload}
+                    disabled={isUploading}
+                  >
                     Cancel
                   </Button>
                 </div>
