@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Video/ Image Model Processor</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      .box { background:#fff; padding:16px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); max-width:900px; }
+      .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+      .col { flex:1 1 300px; }
+      .preview { max-width:100%; border:1px solid #ddd; border-radius:6px; }
+      button { padding:8px 12px; cursor:pointer; }
+      .warning { background:#fff4e5; padding:8px; border-radius:6px; color:#7a4a00; margin-bottom:12px; }
+    </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Model Processor</h2>
+
+    {% if not model_loaded %}
+    <div class="warning">⚠️ Model not loaded. Put your `.pt` file as `model.pt` or update `MODEL_PATH` in `app.py`.</div>
+    {% endif %}
+
+    <div class="row">
+      <div class="col">
+        <h3>Image</h3>
+        <input type="file" id="imgFile" accept="image/*"><br><br>
+        <button id="btnImg">Process Image</button>
+        <div style="margin-top:12px;">
+          <img id="imgPreview" class="preview" src="" alt="" />
+        </div>
+      </div>
+
+      <div class="col">
+        <h3>Video</h3>
+        <input type="file" id="videoFile" accept="video/*"><br><br>
+        <button id="btnVid">Process Video</button>
+        <div style="margin-top:12px;">
+          <video id="videoPreview" class="preview" controls></video>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <h3>Results</h3>
+      <div class="row">
+        <div class="col">
+          <h4>Image Output</h4>
+          <img id="imgOutput" class="preview" src="" alt="" />
+        </div>
+        <div class="col">
+          <h4>Video Output</h4>
+          <video id="videoOutput" class="preview" controls></video>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const imgFile = document.getElementById('imgFile');
+const videoFile = document.getElementById('videoFile');
+const btnImg = document.getElementById('btnImg');
+const btnVid = document.getElementById('btnVid');
+const imgPreview = document.getElementById('imgPreview');
+const imgOutput = document.getElementById('imgOutput');
+const videoPreview = document.getElementById('videoPreview');
+const videoOutput = document.getElementById('videoOutput');
+
+imgFile.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  imgPreview.src = URL.createObjectURL(f);
+});
+
+videoFile.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  videoPreview.src = URL.createObjectURL(f);
+});
+
+btnImg.addEventListener('click', () => {
+  const f = imgFile.files[0];
+  if (!f) { alert('Select an image first'); return; }
+  const fd = new FormData();
+  fd.append('file', f);
+  btnImg.disabled = true;
+  btnImg.textContent = 'Processing...';
+  fetch('/process_image', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      btnImg.disabled = false;
+      btnImg.textContent = 'Process Image';
+      if (data.success) {
+        imgOutput.src = '/result_image?t=' + Date.now();
+      } else {
+        alert('Error: ' + (data.error || 'unknown'));
+      }
+    }).catch(e => { btnImg.disabled=false; btnImg.textContent='Process Image'; alert(e); });
+});
+
+btnVid.addEventListener('click', () => {
+  const f = videoFile.files[0];
+  if (!f) { alert('Select a video first'); return; }
+  const fd = new FormData();
+  fd.append('file', f);
+  btnVid.disabled = true;
+  btnVid.textContent = 'Processing (this may take time)...';
+  fetch('/process_video', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      btnVid.disabled = false;
+      btnVid.textContent = 'Process Video';
+      if (data.success) {
+        videoOutput.src = '/result_video?t=' + Date.now();
+      } else {
+        alert('Error: ' + (data.error || 'unknown'));
+      }
+    }).catch(e => { btnVid.disabled=false; btnVid.textContent='Process Video'; alert(e); });
+});
+</script>
+</body>
+</html>
