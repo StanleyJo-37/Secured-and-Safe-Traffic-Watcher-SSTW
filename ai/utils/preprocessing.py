@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import joblib
+from .dcp.haze_remover import HazeRemover
 
 def get_bbox_points(bbox):
 	x, y, w, h = bbox
@@ -9,18 +10,56 @@ def get_bbox_points(bbox):
 
 	return max(0, int(x)), max(0, int(y)), x2, y2
 
-def resize_image_and_bboxes(image, labels, scale=0.25):
-	if scale == 1.0:
-		return image, labels
+def project_2d(
+  img_width: float,
+  img_height: float,
+  bbox_3d: np.array,
+):
 
-	resized_img = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR if scale > 1.0 else cv2.INTER_AREA)
+  x_min = np.min(bbox_3d[:, 0])
+  x_max = np.max(bbox_3d[:, 0])
+  y_min = np.min(bbox_3d[:, 1])
+  y_max = np.max(bbox_3d[:, 1])
+  
+  x_min = max(0, x_min)
+  y_min = max(0, y_min)
+  x_max = min(img_width, x_max)
+  y_max = min(img_height, y_max)
+
+  return int(x_min), int(x_max), int(y_min), int(y_max)
+
+def convert_to_yolo(x_min, y_min, x_max, y_max, img_w, img_h):
+  """Converts 2D Box to Normalized YOLO Format (cx, cy, w, h)."""
+  # Calculate Center, Width, Height
+  box_w = x_max - x_min
+  box_h = y_max - y_min
+  center_x = x_min + (box_w / 2)
+  center_y = y_min + (box_h / 2)
+  
+  # Normalize
+  norm_x = center_x / img_w
+  norm_y = center_y / img_h
+  norm_w = box_w / img_w
+  norm_h = box_h / img_h
+  
+  return norm_x, norm_y, norm_w, norm_h
+
+def resize_image_and_bboxes(image, boxes, new_size: tuple[int, int]):
+	h, w = image.shape[:2]
+	scale_x = w / new_size[0]
+	scale_y = h / new_size[1]
+
+	resized_img = cv2.resize(image, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR if scale_x > 1.0 and scale_y > 1.0 else cv2.INTER_AREA)
 
 	new_bboxes = []
 
-	for bbox in labels['target_bboxes']:
-		new_bboxes.append([int(c * scale) for c in bbox])
+	for bbox in boxes:
+		y_norm = bbox[0] / (2 * new_size[1])
+		x_norm = bbox[1] / (2 * new_size[0])
+		w_norm = bbox[2] / new_size[0]
+		w_norm = bbox[3] / new_size[0]
 
-	return resized_img, { **labels, 'target_bboxes': new_bboxes }
+	return resized_img, boxes
 
 uniform_lookup = np.array([58] * 256)
 bin_id = 0
@@ -139,3 +178,29 @@ def extract_features(X, pca_path='outputs/hog_pca.joblib'):
 		features_list.append(feat)
 
 	return np.array(boxes_list), np.array(features_list)
+
+def variance_of_laplacian(image):
+	'''Return average variance of horizontal lines of a grayscale image'''
+	return cv2.Laplacian(image, cv2.CV_64F).var()
+
+def is_foggy(image):
+	var_l = variance_of_laplacian(image)
+	return var_l < 50
+
+haze_remover = HazeRemover()
+clahe = cv2.createCLAHE(2.0, (8, 8))
+
+def preprocess(img, foggy:bool=False):
+	img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	img_gray_final = cv2.medianBlur(img_gray, 3)
+	
+	if foggy or is_foggy(img_gray_final):
+		img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+		img_dehazed = haze_remover.remove_haze(img_rgb)
+		img_dehazed = np.clip(img_dehazed, 0, 255).astype(np.uint8)
+		
+		img_gray_final = cv2.cvtColor(img_dehazed, cv2.COLOR_RGB2GRAY)
+	
+	img_clahe = clahe.apply(img_gray_final)
+	
+	return img_clahe.astype(np.float32)
