@@ -3,7 +3,7 @@ import cv2
 import json
 from tqdm import tqdm
 import numpy as np
-from preprocessing import extract_features
+from ai.utils.preprocessing import extract_features
 
 DATASET_PATH = "./datasets"
 

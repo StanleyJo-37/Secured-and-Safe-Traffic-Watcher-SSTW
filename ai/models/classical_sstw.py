@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import cv2
 import joblib
-from preprocessing import ltp, resize_image_and_bboxes, get_bbox_points
+from ai.utils.preprocessing import ltp, resize_image_and_bboxes, get_bbox_points
 import copy
 
 class FeatureExtractor():

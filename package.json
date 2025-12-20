@@ -1,0 +1,21 @@
+{
+  "name": "lec",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StanleyJo-37/Secured-and-Safe-Traffic-Watcher-SSTW.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/StanleyJo-37/Secured-and-Safe-Traffic-Watcher-SSTW/issues"
+  },
+  "homepage": "https://github.com/StanleyJo-37/Secured-and-Safe-Traffic-Watcher-SSTW#readme"
+}

@@ -4,7 +4,7 @@ import torchvision
 import os
 import numpy as np
 import torch
-from preprocessing import resize_image_and_bboxes, get_bbox_points
+from ai.utils.preprocessing import resize_image_and_bboxes, get_bbox_points
 
 class TUMDataset(Dataset):
 	def __init__(

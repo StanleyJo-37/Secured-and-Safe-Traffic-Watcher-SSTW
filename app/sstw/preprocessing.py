@@ -87,6 +87,31 @@ def ltp(img, k):
 
 	return np.concatenate([hist_upper, hist_lower])
 
+def variance_of_laplacian(image):
+  return cv2.Laplacian(image, cv2.CV_64F).var()
+
+def is_foggy(image):
+  var_l = variance_of_laplacian(image)
+  return var_l < 50
+
+haze_remover = HazeRemover()
+clahe = cv2.createCLAHE(2.0, (8, 8))
+
+def preprocess(img):
+  img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+  img_gray_final = cv2.medianBlur(img_gray, 3)
+  
+  if is_foggy(img_gray_final):
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img_dehazed = haze_remover.remove_haze(img_rgb)
+    img_dehazed = np.clip(img_dehazed, 0, 255).astype(np.uint8)
+    
+    img_gray_final = cv2.cvtColor(img_dehazed, cv2.COLOR_RGB2GRAY)
+  
+  img_clahe = clahe.apply(img_gray_final)
+  
+  return img_clahe.astype(np.float32)
+
 hog = cv2.HOGDescriptor((128, 64), (16, 16), (8, 8), (8, 8), 9)
 def extract_features(X, pca_path='outputs/hog_pca.joblib'):
 	# Get bounding boxes using Selective Search
@@ -140,22 +165,3 @@ def extract_features(X, pca_path='outputs/hog_pca.joblib'):
 		features_list.append(feat)
 
 	return np.array(boxes_list), np.array(features_list)
-
-def is_foggy(img, threshold: int = 200):
-  gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-  avg_variance = np.var(gray_img)
-
-  return avg_variance < threshold
-
-def normalize_image(img):
-    img = img.astype(np.float32) / 255.0
-
-    dehazed_img = img.copy()
-    if is_foggy(img):
-        haze_remover = HazeRemover()
-        dehazed_img = haze_remover.remove_haze(img)
-
-    dehazed_img = (np.clip(dehazed_img, 0, 1) * 255).astype(np.uint8)
-    final_img = cv2.bilateralFilter(dehazed_img, 9, 75, 75)
-
-    return final_img
