@@ -163,56 +163,56 @@ def get_result_image():
         return send_file(result_path, mimetype='image/png')
     return jsonify({'error': 'No result available'}), 404
 
-# @app.route('/process_video', methods=['POST'])
-# def process_video():
-#     if not model_loaded: return jsonify({'error': 'Model not loaded'}), 500
-#     file = request.files.get('file')
-#     if not file: return jsonify({'error': 'No file'}), 400
+@app.route('/process_video', methods=['POST'])
+def process_video():
+    if not model_loaded: return jsonify({'error': 'Model not loaded'}), 500
+    file = request.files.get('file')
+    if not file: return jsonify({'error': 'No file'}), 400
 
-#     input_path = os.path.join(app.config['UPLOAD_FOLDER'], 'input_video.mp4')
-#     file.save(input_path)
+    input_path = os.path.join(app.config['UPLOAD_FOLDER'], 'input_video.mp4')
+    file.save(input_path)
 
-#     cap = cv2.VideoCapture(input_path)
-#     if not cap.isOpened(): return jsonify({'error': 'Bad video'}), 500
+    cap = cv2.VideoCapture(input_path)
+    if not cap.isOpened(): return jsonify({'error': 'Bad video'}), 500
 
-#     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-#     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-#     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     
-#     output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result_video.mp4')
-#     # Use 'avc1' or 'h264' for better browser compatibility
-#     fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
-#     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result_video.mp4')
+    # Use 'avc1' or 'h264' for better browser compatibility
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-#     try:
-#         while True:
-#             ret, frame = cap.read()
-#             if not ret: break
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret: break
 
-#             # 1. Run Tracker
-#             # tracker.process_frame handles inference, NMS, and DeepSORT
-#             tracks = tracker.process_frame(frame)
+            # 1. Run Tracker
+            # tracker.process_frame handles inference, NMS, and DeepSORT
+            tracks = tracker.process_frame(frame)
             
-#             # 2. Convert Tracks to Drawing Format
-#             detections = []
-#             for t in tracks:
-#                 detections.append({
-#                     'bbox': t['bbox'],
-#                     'id': t['id'],
-#                     'label': t['class_id']
-#                 })
+            # 2. Convert Tracks to Drawing Format
+            detections = []
+            for t in tracks:
+                detections.append({
+                    'bbox': t['bbox'],
+                    'id': t['id'],
+                    'label': t['class_id']
+                })
             
-#             # 3. Draw
-#             drawn_frame = draw_results(frame, detections)
-#             out.write(drawn_frame)
+            # 3. Draw
+            drawn_frame = draw_results(frame, detections)
+            out.write(drawn_frame)
 
-#         cap.release()
-#         out.release()
-#         return jsonify({'success': True})
-#     except Exception as e:
-#         cap.release()
-#         out.release()
-#         return jsonify({'error': str(e)}), 500
+        cap.release()
+        out.release()
+        return jsonify({'success': True})
+    except Exception as e:
+        cap.release()
+        out.release()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
