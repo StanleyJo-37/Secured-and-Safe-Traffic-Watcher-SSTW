@@ -1,3 +1,5 @@
 .env
 /**/datasets
 /**/a9_dataset
+/**/yolov8n.pt
+/**/*.pyc

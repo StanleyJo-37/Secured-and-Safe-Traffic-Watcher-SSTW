@@ -1,0 +1,14 @@
+path: ./../a9_dataset/yolo_data
+train: train/images
+val: val/images
+test: test/images
+
+nc: 6
+
+names:
+  0: Truck
+  1: Car
+  2: Van
+  3: Trailer
+  4: Other Vehicles
+  5: Pedestrian
